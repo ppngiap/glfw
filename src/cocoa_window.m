@@ -364,7 +364,7 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 // Delegate for application related notifications
 //------------------------------------------------------------------------
 
-@interface GLFWApplicationDelegate : NSObject
+@interface GLFWApplicationDelegate : NSObject <NSApplicationDelegate>
 @end
 
 @implementation GLFWApplicationDelegate
