@@ -271,17 +271,21 @@ static GLFWbool initializeTIS(void)
     return updateUnicodeDataNS();
 }
 
-@interface GLFWLayoutListener : NSObject
+@interface GLFWHelper : NSObject
 @end
 
-@implementation GLFWLayoutListener
+@implementation GLFWHelper
 
 - (void)selectedKeyboardInputSourceChanged:(NSObject* )object
 {
     updateUnicodeDataNS();
 }
 
-@end
+- (void)doNothing:(id)object
+{
+}
+
+@end // GLFWHelper
 
 
 //////////////////////////////////////////////////////////////////////////
@@ -291,13 +295,31 @@ static GLFWbool initializeTIS(void)
 int _glfwPlatformInit(void)
 {
     _glfw.ns.autoreleasePool = [[NSAutoreleasePool alloc] init];
+    _glfw.ns.helper = [[GLFWHelper alloc] init];
+
+    [NSThread detachNewThreadSelector:@selector(doNothing:)
+                             toTarget:_glfw.ns.helper
+                           withObject:nil];
+
+    [NSApplication sharedApplication];
+
+    NSEvent* (^block)(NSEvent*) = ^ NSEvent* (NSEvent* event)
+    {
+        if ([event modifierFlags] & NSEventModifierFlagCommand)
+            [[NSApp keyWindow] sendEvent:event];
+
+        return event;
+    };
+
+    _glfw.ns.keyUpMonitor =
+        [NSEvent addLocalMonitorForEventsMatchingMask:NSEventMaskKeyUp
+                                              handler:block];
 
     if (_glfw.hints.init.ns.chdir)
         changeToResourcesDirectory();
 
-    _glfw.ns.listener = [[GLFWLayoutListener alloc] init];
     [[NSNotificationCenter defaultCenter]
-        addObserver:_glfw.ns.listener
+        addObserver:_glfw.ns.helper
            selector:@selector(selectedKeyboardInputSourceChanged:)
                name:NSTextInputContextKeyboardSelectionDidChangeNotification
              object:nil];
@@ -342,17 +364,20 @@ void _glfwPlatformTerminate(void)
         _glfw.ns.delegate = nil;
     }
 
-    if (_glfw.ns.listener)
+    if (_glfw.ns.helper)
     {
         [[NSNotificationCenter defaultCenter]
-            removeObserver:_glfw.ns.listener
+            removeObserver:_glfw.ns.helper
                       name:NSTextInputContextKeyboardSelectionDidChangeNotification
                     object:nil];
         [[NSNotificationCenter defaultCenter]
-            removeObserver:_glfw.ns.listener];
-        [_glfw.ns.listener release];
-        _glfw.ns.listener = nil;
+            removeObserver:_glfw.ns.helper];
+        [_glfw.ns.helper release];
+        _glfw.ns.helper = nil;
     }
+
+    if (_glfw.ns.keyUpMonitor)
+        [NSEvent removeMonitor:_glfw.ns.keyUpMonitor];
 
     free(_glfw.ns.clipboardString);
 
